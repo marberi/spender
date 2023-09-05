@@ -14,6 +14,7 @@ import pickle
 from torch.utils.data import DataLoader
 from torchinterp1d import Interp1d
 import h5py
+import xitorch
 
 from ..instrument import Instrument, get_skyline_mask
 from ..util import BatchedFilesDataset, load_batch
@@ -550,20 +551,47 @@ class DESI(Instrument):
             # transform augments into the wavelengths of observed spectra
             wave_redshifted =  (wave_obs.unsqueeze(1) * zfactor).T
 
+
+
             # redshift interpolation
-            spec_new = Interp1d()(wave_obs.repeat(batch_size,1), spec, wave_redshifted).float()
+            #spec_new = Interp1d()(wave_obs.repeat(batch_size,1), spec, wave_redshifted).float()
+
+            # Code using a different interpolation library..
+            tmp = []
+            for i in range(len(spec)):
+                interp = xitorch.interpolate.Interp1D(wave_redshifted[i], method='linear', extrap='bound')
+                tmp.append(interp(wave_obs, spec[i]))
+              
+            spec_new = torch.stack(tmp)
+
+
+
             # ensure extrapolated values have zero weights
             wmin = wave_obs.min()
             wmax = wave_obs.max()
 
             # ensure extrapolated values have zero weights
             w_new = torch.clone(w)
-            w_new = Interp1d()(wave_obs.repeat(batch_size,1),
-                               w_new, wave_redshifted).float()
+#            w_new = Interp1d()(wave_obs.repeat(batch_size,1),
+#                               w_new, wave_redshifted).float()
+
+            tmp = []
+            for i in range(len(w)):
+                interp = xitorch.interpolate.Interp1D(wave_redshifted[i], method='linear', extrap='bound')
+                tmp.append(interp(wave_obs, w[i]))
+              
+            w_new = torch.stack(tmp)
+
             #w_new = torch.nn.functional.relu(w_new)
 
             out = (wave_redshifted<wmin)|(wave_redshifted>wmax)
 
+            spec_new = spec_new.type(torch.float)
+            w_new = w_new.type(torch.float)
+            z_new = z_new.type(torch.float)
+
+#            from IPython.core import debugger as ipdb
+#            ipdb.set_trace()
         else:
             spec_new, w_new, z_new = torch.clone(spec), torch.clone(w), z
 

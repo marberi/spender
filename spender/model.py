@@ -345,6 +345,38 @@ class SpectrumDecoder(nn.Module):
 
         return spectrum
 
+    def transform(self, x, instrument=None, z=0):
+        # Using a different algorithm for transforming the spectra since
+        # the other fails.
+
+        # Interpolate the spectra back to restframe.
+        from IPython.core import debugger as ipdb
+        import xitorch.interpolate
+
+
+        wave_redshifted = self.wave_rest[None,:]*(1+z[:,None])
+        wave_obs = instrument.wave_obs
+
+        tmp = []
+        for i in range(len(x)):
+            interp = xitorch.interpolate.Interp1D(wave_redshifted[i], method='linear', extrap='bound')
+            tmp.append(interp(wave_obs, x[i]))
+
+        spectrum = torch.stack(tmp)
+
+        # convolve with LSF
+        if instrument.lsf is not None:
+            spectrum = instrument.lsf(spectrum.unsqueeze(1)).squeeze(1)
+
+        # apply calibration function to observed spectrum
+        if instrument is not None and instrument.calibration is not None:
+            spectrum = instrument.calibration(wave_obs, spectrum)
+
+
+        return spectrum
+
+
+
     @property
     def n_parameters(self):
         """Number of parameters in this model"""

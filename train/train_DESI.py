@@ -4,6 +4,7 @@ import argparse
 import functools
 import os
 import time
+from tqdm import tqdm
 
 import numpy as np
 import torch
@@ -171,7 +172,8 @@ def get_losses(model,
     loss, sim_loss, s = _losses(model, instrument, batch, similarity=similarity, slope=slope)
 
     if aug_fct is not None:
-        batch_copy = aug_fct(batch,z_max=args.z_max)
+        z_max = 0.8 # Hack, variable not passed.
+        batch_copy = aug_fct(batch,z_max=z_max)
         loss_, sim_loss_, s_ = _losses(model, instrument, batch_copy, similarity=similarity, slope=slope,skip=True)
     else:
         loss_ = sim_loss_ = 0
@@ -180,6 +182,10 @@ def get_losses(model,
         cons_loss = slope*consistency_loss(s, s_)
     else:
         cons_loss = 0
+
+    #from IPython.core import debugger as ipdb
+    #if slope > 0:
+    #    ipdb.set_trace()
 
     return loss, sim_loss, loss_, sim_loss_, cons_loss
 
@@ -218,6 +224,8 @@ def train(models,
           instruments,
           trainloaders,
           validloaders,
+          train_sequence=None,
+          ANNEAL_SCHEDULE=None,
           n_epoch=200,
           outfile=None,
           losses=None,
@@ -299,7 +307,7 @@ def train(models,
             instruments[which].train()
 
             n_sample = 0
-            for k, batch in enumerate(trainloaders[which]):
+            for k, batch in tqdm(enumerate(trainloaders[which])):
                 batch_size = len(batch[0])
                 losses = get_losses(
                     models[which],
